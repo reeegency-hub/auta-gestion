@@ -4,14 +4,16 @@
 
 databases:
   - name: auta-gestion-db
-    plan: basic-256mb
+    # Free = OK pilote (expire ~30j). Passer basic-256mb + carte CB pour prod durable.
+    plan: free
     region: frankfurt
 
 services:
   - type: web
     name: auta-gestion-api
     runtime: python
-    plan: starter
+    # Free = cold start. Passer starter + carte CB pour always-on.
+    plan: free
     region: frankfurt
     rootDir: backend
     buildCommand: pip install -r requirements.txt

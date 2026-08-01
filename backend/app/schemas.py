@@ -41,6 +41,11 @@ class LoginIn(BaseModel):
     password: str
 
 
+class ChangePasswordIn(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=6)
+
+
 class GarageSettingsIn(BaseModel):
     hourly_rate_carrosserie: float = 65.0
     hourly_rate_peinture: float = 75.0

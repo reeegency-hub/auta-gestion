@@ -8,7 +8,7 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models import GarageSettings, Tenant, User, UserRole
-from app.schemas import LoginIn, RegisterIn, Token, UserOut
+from app.schemas import ChangePasswordIn, LoginIn, RegisterIn, Token, UserOut
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -20,14 +20,15 @@ def register(payload: RegisterIn, db: Session = Depends(get_db)):
             status_code=403,
             detail="Inscription fermée. Contactez l’administrateur pour créer un compte.",
         )
-    if db.query(User).filter(User.email == payload.email).first():
+    email = str(payload.email).strip().lower()
+    if db.query(User).filter(User.email == email).first():
         raise HTTPException(status_code=400, detail="Email déjà utilisé")
     tenant = Tenant(name=payload.garage_name)
     db.add(tenant)
     db.flush()
     user = User(
         tenant_id=tenant.id,
-        email=payload.email,
+        email=email,
         full_name=payload.full_name,
         hashed_password=hash_password(payload.password),
         role=UserRole.directeur,
@@ -40,8 +41,21 @@ def register(payload: RegisterIn, db: Session = Depends(get_db)):
         )
     )
     db.commit()
-    token = create_access_token(payload.email)
+    token = create_access_token(email)
     return Token(access_token=token)
+
+
+@router.post("/change-password")
+def change_password(
+    payload: ChangePasswordIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if not verify_password(payload.current_password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="Mot de passe actuel incorrect")
+    user.hashed_password = hash_password(payload.new_password)
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/users", response_model=list[UserOut])

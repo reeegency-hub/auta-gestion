@@ -8,6 +8,9 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
+  const [pwd, setPwd] = useState({ current_password: '', new_password: '', confirm: '' })
+  const [pwdMsg, setPwdMsg] = useState('')
+  const [pwdErr, setPwdErr] = useState('')
 
   useEffect(() => {
     setLoading(true)
@@ -28,6 +31,29 @@ export default function SettingsPage() {
       setSaved(true)
     } catch (err) {
       setError(err.message)
+    }
+  }
+
+  async function changePassword(e) {
+    e.preventDefault()
+    setPwdErr('')
+    setPwdMsg('')
+    if (pwd.new_password !== pwd.confirm) {
+      setPwdErr('Les nouveaux mots de passe ne correspondent pas')
+      return
+    }
+    try {
+      await api('/api/auth/change-password', {
+        method: 'POST',
+        body: {
+          current_password: pwd.current_password,
+          new_password: pwd.new_password,
+        },
+      })
+      setPwd({ current_password: '', new_password: '', confirm: '' })
+      setPwdMsg('Mot de passe mis à jour.')
+    } catch (err) {
+      setPwdErr(err.message)
     }
   }
 
@@ -124,6 +150,50 @@ export default function SettingsPage() {
           <div className="sm:col-span-2">
             <Button type="submit" fullWidth>
               Enregistrer
+            </Button>
+          </div>
+        </form>
+      </Card>
+
+      <Card className="mt-4 p-4">
+        <h2 className="mb-3 text-[15px] font-semibold text-ink">Mot de passe</h2>
+        <ErrorBanner message={pwdErr} />
+        {pwdMsg && (
+          <div className="mb-4 rounded-[var(--radius-sm)] bg-success-bg px-4 py-3 text-[13px] font-medium text-success">
+            {pwdMsg}
+          </div>
+        )}
+        <form onSubmit={changePassword} className="grid gap-3 sm:grid-cols-2">
+          <Input
+            label="Mot de passe actuel"
+            type="password"
+            autoComplete="current-password"
+            value={pwd.current_password}
+            onChange={(e) => setPwd({ ...pwd, current_password: e.target.value })}
+            required
+          />
+          <div className="hidden sm:block" />
+          <Input
+            label="Nouveau mot de passe"
+            type="password"
+            autoComplete="new-password"
+            value={pwd.new_password}
+            onChange={(e) => setPwd({ ...pwd, new_password: e.target.value })}
+            required
+            minLength={6}
+          />
+          <Input
+            label="Confirmer"
+            type="password"
+            autoComplete="new-password"
+            value={pwd.confirm}
+            onChange={(e) => setPwd({ ...pwd, confirm: e.target.value })}
+            required
+            minLength={6}
+          />
+          <div className="sm:col-span-2">
+            <Button type="submit" fullWidth>
+              Changer le mot de passe
             </Button>
           </div>
         </form>
