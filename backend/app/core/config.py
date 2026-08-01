@@ -27,13 +27,18 @@ class Settings(BaseSettings):
     # File d'extraction (optionnel)
     redis_url: str = ""
 
-    # Stockage S3 (optionnel — sinon disque local)
+    # Stockage S3 / R2 (optionnel — sinon disque local)
     s3_bucket: str = ""
     s3_region: str = "eu-west-3"
     s3_endpoint_url: str = ""
     s3_access_key: str = ""
     s3_secret_key: str = ""
     s3_prefix: str = "auta"
+
+    # Stockage Supabase (prioritaire si configuré)
+    supabase_url: str = ""
+    supabase_service_role_key: str = ""
+    supabase_bucket: str = "auta"
 
     # Email SMTP (optionnel)
     smtp_host: str = ""
@@ -57,6 +62,14 @@ class Settings(BaseSettings):
     @property
     def s3_enabled(self) -> bool:
         return bool(self.s3_bucket and self.s3_access_key and self.s3_secret_key)
+
+    @property
+    def supabase_enabled(self) -> bool:
+        return bool(self.supabase_url and self.supabase_service_role_key)
+
+    @property
+    def remote_storage_enabled(self) -> bool:
+        return self.supabase_enabled or self.s3_enabled
 
 
 @lru_cache

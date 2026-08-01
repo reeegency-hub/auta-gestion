@@ -23,7 +23,7 @@ from app.api import (
 from app.core.config import get_settings
 from app.core.database import Base, engine
 from app.services.bootstrap import ensure_demo_user
-from app.services.storage import ensure_upload_dirs
+from app.services.storage import ensure_supabase_bucket, ensure_upload_dirs
 
 logger = logging.getLogger("auta")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -79,6 +79,10 @@ def on_startup():
     ensure_upload_dirs()
     Base.metadata.create_all(bind=engine)
     ensure_demo_user()
+    try:
+        ensure_supabase_bucket()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Supabase storage non initialisé: %s", exc)
     logger.info("AUTA Gestion démarré — DB + uploads OK")
 
 
@@ -108,6 +112,7 @@ def health():
         "openai": False,
         "grok": bool(settings_cfg.grok_api_key),
         "s3": settings_cfg.s3_enabled,
+        "supabase": settings_cfg.supabase_enabled,
         "redis": bool(settings_cfg.redis_url),
         "smtp": bool(settings_cfg.smtp_host),
         "registration_open": settings_cfg.allow_open_registration,

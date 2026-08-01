@@ -2,11 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 import io
-import shutil
 import uuid
 
 from fastapi import HTTPException, UploadFile
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, Response
 
 from app.core.config import get_settings
 
@@ -20,6 +19,11 @@ def ensure_upload_dirs() -> Path:
     for sub in ("photos", "reports", "quotes", "invoices", "templates"):
         (root / sub).mkdir(parents=True, exist_ok=True)
     return root
+
+
+def _object_key(category: str, filename: str) -> str:
+    prefix = get_settings().s3_prefix.strip("/")
+    return f"{prefix}/{category}/{filename}" if prefix else f"{category}/{filename}"
 
 
 def _s3_client():
@@ -40,9 +44,105 @@ def _s3_client():
     return boto3.client("s3", **kwargs)
 
 
-def _s3_key(category: str, filename: str) -> str:
-    prefix = get_settings().s3_prefix.strip("/")
-    return f"{prefix}/{category}/{filename}" if prefix else f"{category}/{filename}"
+def _supabase_headers(content_type: str | None = None) -> dict[str, str]:
+    settings = get_settings()
+    headers = {
+        "Authorization": f"Bearer {settings.supabase_service_role_key}",
+        "apikey": settings.supabase_service_role_key,
+    }
+    if content_type:
+        headers["Content-Type"] = content_type
+    return headers
+
+
+def ensure_supabase_bucket() -> None:
+    """Crée le bucket privé si besoin (idempotent)."""
+    settings = get_settings()
+    if not settings.supabase_enabled:
+        return
+    import httpx
+
+    url = f"{settings.supabase_url.rstrip('/')}/storage/v1/bucket"
+    payload = {
+        "id": settings.supabase_bucket,
+        "name": settings.supabase_bucket,
+        "public": False,
+        "file_size_limit": MAX_UPLOAD_BYTES,
+    }
+    with httpx.Client(timeout=30.0) as client:
+        resp = client.post(url, headers=_supabase_headers("application/json"), json=payload)
+        # 200/201 created, 409 already exists
+        if resp.status_code not in (200, 201, 409):
+            # Bucket may already exist under list — ignore duplicate-ish errors
+            if "already exists" not in resp.text.lower() and "Duplicate" not in resp.text:
+                raise RuntimeError(f"Supabase bucket: HTTP {resp.status_code} {resp.text[:300]}")
+
+
+def _supabase_put(key: str, data: bytes, content_type: str) -> None:
+    settings = get_settings()
+    import httpx
+
+    ensure_supabase_bucket()
+    url = (
+        f"{settings.supabase_url.rstrip('/')}/storage/v1/object/"
+        f"{settings.supabase_bucket}/{key}"
+    )
+    headers = _supabase_headers(content_type)
+    headers["x-upsert"] = "true"
+    with httpx.Client(timeout=60.0) as client:
+        resp = client.post(url, headers=headers, content=data)
+        if resp.status_code not in (200, 201):
+            raise HTTPException(
+                status_code=502,
+                detail=f"Échec upload Supabase ({resp.status_code})",
+            )
+
+
+def _supabase_get(key: str) -> bytes:
+    settings = get_settings()
+    import httpx
+
+    url = (
+        f"{settings.supabase_url.rstrip('/')}/storage/v1/object/"
+        f"{settings.supabase_bucket}/{key}"
+    )
+    with httpx.Client(timeout=60.0) as client:
+        resp = client.get(url, headers=_supabase_headers())
+        if resp.status_code != 200:
+            raise HTTPException(status_code=404, detail="Fichier introuvable")
+        return resp.content
+
+
+def _remote_put(key: str, data: bytes, content_type: str) -> bool:
+    """True si écriture remote effectuée."""
+    settings = get_settings()
+    if settings.supabase_enabled:
+        _supabase_put(key, data, content_type)
+        return True
+    client = _s3_client()
+    if client:
+        client.put_object(
+            Bucket=settings.s3_bucket,
+            Key=key,
+            Body=data,
+            ContentType=content_type,
+        )
+        return True
+    return False
+
+
+def _remote_get(key: str) -> bytes | None:
+    settings = get_settings()
+    if settings.supabase_enabled:
+        return _supabase_get(key)
+    client = _s3_client()
+    if client:
+        try:
+            obj = client.get_object(Bucket=settings.s3_bucket, Key=key)
+            return obj["Body"].read()
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=404, detail="Fichier introuvable") from exc
+    return None
 
 
 def save_upload(
@@ -75,36 +175,20 @@ def save_upload(
             )
         buffer.write(chunk)
     data = buffer.getvalue()
-
-    settings = get_settings()
-    client = _s3_client()
-    if client:
-        client.put_object(
-            Bucket=settings.s3_bucket,
-            Key=_s3_key(category, stored),
-            Body=data,
-            ContentType=file.content_type or "application/octet-stream",
-        )
-    else:
-        dest = Path(settings.upload_dir) / category / stored
+    content_type = file.content_type or "application/octet-stream"
+    key = _object_key(category, stored)
+    if not _remote_put(key, data, content_type):
+        dest = Path(get_settings().upload_dir) / category / stored
         dest.write_bytes(data)
     return stored, file.filename or stored
 
 
 def save_bytes(data: bytes, category: str, filename: str, content_type: str = "application/pdf") -> str:
-    """Persiste des bytes générés (PDF devis/facture) en local ou S3."""
+    """Persiste des bytes générés (PDF devis/facture) en local, Supabase ou S3."""
     ensure_upload_dirs()
-    settings = get_settings()
-    client = _s3_client()
-    if client:
-        client.put_object(
-            Bucket=settings.s3_bucket,
-            Key=_s3_key(category, filename),
-            Body=data,
-            ContentType=content_type,
-        )
-    else:
-        dest = Path(settings.upload_dir) / category / filename
+    key = _object_key(category, filename)
+    if not _remote_put(key, data, content_type):
+        dest = Path(get_settings().upload_dir) / category / filename
         dest.write_bytes(data)
     return filename
 
@@ -121,13 +205,12 @@ def resolve_path(category: str, filename: str) -> Path:
 
 def read_bytes(category: str, filename: str) -> bytes:
     settings = get_settings()
-    client = _s3_client()
-    if client:
-        try:
-            obj = client.get_object(Bucket=settings.s3_bucket, Key=_s3_key(category, filename))
-            return obj["Body"].read()
-        except Exception as exc:  # noqa: BLE001
-            raise HTTPException(status_code=404, detail="Fichier introuvable") from exc
+    key = _object_key(category, filename)
+    if settings.remote_storage_enabled:
+        data = _remote_get(key)
+        if data is None:
+            raise HTTPException(status_code=404, detail="Fichier introuvable")
+        return data
     path = resolve_path(category, filename)
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Fichier introuvable")
@@ -135,9 +218,9 @@ def read_bytes(category: str, filename: str) -> bytes:
 
 
 def materialize_path(category: str, filename: str) -> Path:
-    """Retourne un chemin local utilisable (télécharge depuis S3 si besoin)."""
+    """Retourne un chemin local utilisable (télécharge depuis remote si besoin)."""
     settings = get_settings()
-    if not settings.s3_enabled:
+    if not settings.remote_storage_enabled:
         path = resolve_path(category, filename)
         if not path.is_file():
             raise HTTPException(status_code=404, detail="Fichier introuvable")
@@ -154,8 +237,7 @@ def materialize_path(category: str, filename: str) -> Path:
 def file_response_or_404(category: str, filename: str, download_name: str | None = None):
     settings = get_settings()
     name = download_name or filename
-    client = _s3_client()
-    if client:
+    if settings.remote_storage_enabled:
         data = read_bytes(category, filename)
         return Response(
             content=data,

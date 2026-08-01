@@ -24,7 +24,7 @@ def run_extraction_job(report_id: int, expected_filename: Optional[str] = None) 
         if expected_filename and report.filename != expected_filename:
             return
         pdf_path = materialize_path("reports", report.filename)
-        tmp_path = pdf_path if get_settings().s3_enabled else None
+        tmp_path = pdf_path if get_settings().remote_storage_enabled else None
         asyncio.run(process_expertise_report(db, report_id, pdf_path))
     finally:
         if tmp_path is not None:
