@@ -36,6 +36,25 @@ import {
 
 const tabs = ['Dossier', 'Devis', 'Facture', 'Historique']
 
+function humanizeExtractionError(msg) {
+  const raw = String(msg || '')
+  if (!raw) return ''
+  const lower = raw.toLowerCase()
+  if (
+    lower.includes('api.x.ai') ||
+    lower.includes('403') ||
+    lower.includes('permission-denied') ||
+    lower.includes('credits') ||
+    lower.includes('forbidden')
+  ) {
+    return (
+      'Extraction IA indisponible : le compte Grok (xAI) n’a pas de crédits. ' +
+      'Ajoutez des crédits sur console.x.ai, ou saisissez les opérations manuellement.'
+    )
+  }
+  return raw
+}
+
 const TAB_MAP = {
   Dossier: 'dossier',
   Devis: 'devis',
@@ -298,9 +317,13 @@ export default function DossierDetailPage() {
           await load()
           if (rep.status === 'failed') {
             setError(
-              rep.error_message ||
+              humanizeExtractionError(rep.error_message) ||
                 'L’analyse du PDF a échoué. Réessayez avec un autre fichier ou ajoutez les lignes manuellement.'
             )
+          } else if (rep.error_message) {
+            setError(humanizeExtractionError(rep.error_message))
+          } else {
+            setError('')
           }
           done = true
           break
