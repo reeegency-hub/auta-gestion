@@ -115,5 +115,6 @@ def health():
         "supabase": settings_cfg.supabase_enabled,
         "redis": bool(settings_cfg.redis_url),
         "smtp": bool(settings_cfg.smtp_host),
+        "sentry": bool(settings_cfg.sentry_dsn),
         "registration_open": settings_cfg.allow_open_registration,
     }
