@@ -1,11 +1,17 @@
-# Blueprint Render — fichier à la RACINE du repo, nommé exactement : render.yaml
-# Sur Render : New → Blueprint → Blueprint Path = render.yaml (pas AUTA.GESTION)
+# Blueprint Render — Phase pilote « pleine puissance »
+# Sur Render : New → Blueprint → Blueprint Path = render.yaml
+# OU : synchro sur le service existant après push.
+
+databases:
+  - name: auta-gestion-db
+    plan: basic-256mb
+    region: frankfurt
 
 services:
   - type: web
     name: auta-gestion-api
     runtime: python
-    plan: free
+    plan: starter
     region: frankfurt
     rootDir: backend
     buildCommand: pip install -r requirements.txt
@@ -14,12 +20,17 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: ALLOW_OPEN_REGISTRATION
-        value: "true"
+        value: "false"
       - key: DATABASE_URL
-        value: sqlite:////tmp/auta.db
+        fromDatabase:
+          name: auta-gestion-db
+          property: connectionString
       - key: UPLOAD_DIR
         value: /tmp/auta-uploads
       - key: CORS_ORIGINS
         value: "https://reeegency-hub.github.io,https://reeegency-hub.github.io/auta-gestion"
       - key: PYTHON_VERSION
         value: "3.11.9"
+      # À renseigner manuellement dans le dashboard Render (ne pas committer la clé) :
+      # GROK_API_KEY, GROK_BASE_URL=https://api.x.ai/v1, GROK_MODEL=grok-3-mini
+      # Puis plus tard : SMTP_*, S3_*
