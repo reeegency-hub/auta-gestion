@@ -1,32 +1,25 @@
-# Déploiement Render.com (API) — gratuit pour démarrer
-# 1. Connecte le repo GitHub sur https://render.com
-# 2. Ce fichier crée l’API + Postgres
-# 3. Mets à jour VITE_API_URL dans le workflow GitHub Pages avec l’URL Render
-
-databases:
-  - name: auta-db
-    plan: free
+# Blueprint Render — fichier à la RACINE du repo, nommé exactement : render.yaml
+# Sur Render : New → Blueprint → Blueprint Path = render.yaml (pas AUTA.GESTION)
 
 services:
   - type: web
     name: auta-gestion-api
     runtime: python
     plan: free
+    region: frankfurt
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: auta-db
-          property: connectionString
       - key: SECRET_KEY
         generateValue: true
       - key: ALLOW_OPEN_REGISTRATION
         value: "true"
-      - key: CORS_ORIGINS
-        sync: false
+      - key: DATABASE_URL
+        value: sqlite:////tmp/auta.db
       - key: UPLOAD_DIR
         value: /tmp/auta-uploads
+      - key: CORS_ORIGINS
+        sync: false
       - key: PYTHON_VERSION
         value: "3.11.9"
