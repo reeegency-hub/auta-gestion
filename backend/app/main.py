@@ -109,5 +109,6 @@ def health():
         "grok": bool(settings_cfg.grok_api_key),
         "s3": settings_cfg.s3_enabled,
         "redis": bool(settings_cfg.redis_url),
+        "smtp": bool(settings_cfg.smtp_host),
         "registration_open": settings_cfg.allow_open_registration,
     }
