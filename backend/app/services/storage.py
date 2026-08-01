@@ -235,16 +235,36 @@ def materialize_path(category: str, filename: str) -> Path:
 
 
 def file_response_or_404(category: str, filename: str, download_name: str | None = None):
+    from urllib.parse import quote
+
     settings = get_settings()
     name = download_name or filename
+    # ASCII fallback + RFC 5987 for accents (évite 500 sur Content-Disposition)
+    ascii_name = (
+        name.encode("ascii", "ignore").decode("ascii").replace('"', "").strip()
+        or "fichier"
+    )
+    disposition = (
+        f"inline; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(name)}"
+    )
     if settings.remote_storage_enabled:
         data = read_bytes(category, filename)
+        media = "application/pdf" if filename.lower().endswith(".pdf") else "application/octet-stream"
+        if filename.lower().endswith((".jpg", ".jpeg")):
+            media = "image/jpeg"
+        elif filename.lower().endswith(".png"):
+            media = "image/png"
+        elif filename.lower().endswith(".webp"):
+            media = "image/webp"
+        elif filename.lower().endswith(".gif"):
+            media = "image/gif"
         return Response(
             content=data,
-            media_type="application/octet-stream",
-            headers={"Content-Disposition": f'attachment; filename="{name}"'},
+            media_type=media,
+            headers={"Content-Disposition": disposition},
         )
     path = resolve_path(category, filename)
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Fichier introuvable")
-    return FileResponse(path, filename=name)
+    return FileResponse(path, filename=ascii_name, content_disposition_type="inline")
+

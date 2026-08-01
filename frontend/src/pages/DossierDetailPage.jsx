@@ -240,7 +240,16 @@ export default function DossierDetailPage() {
         headers: authHeaders(),
         body: fd,
       })
-      if (!r.ok) throw new Error((await r.json()).detail || 'Upload échoué')
+      if (!r.ok) {
+        let detail = 'Upload photo échoué'
+        try {
+          const data = await r.json()
+          detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)
+        } catch {
+          /* ignore */
+        }
+        throw new Error(detail)
+      }
       await load()
     } catch (err) {
       setError(err.message)
@@ -253,6 +262,11 @@ export default function DossierDetailPage() {
   async function uploadExpertise(e) {
     const file = e.target.files?.[0]
     if (!file) return
+    if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
+      setError('Le rapport d’expertise doit être un fichier PDF.')
+      e.target.value = ''
+      return
+    }
     const fd = new FormData()
     fd.append('file', file)
     setBusy(true)
@@ -263,7 +277,16 @@ export default function DossierDetailPage() {
         headers: authHeaders(),
         body: fd,
       })
-      if (!r.ok) throw new Error((await r.json()).detail || 'Upload échoué')
+      if (!r.ok) {
+        let detail = 'Échec de l’import du rapport d’expertise'
+        try {
+          const data = await r.json()
+          detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)
+        } catch {
+          /* ignore */
+        }
+        throw new Error(detail)
+      }
       await load()
       let done = false
       // ~15 s (19 × 800 ms)
@@ -273,6 +296,12 @@ export default function DossierDetailPage() {
         if (['draft', 'validated', 'failed'].includes(rep.status)) {
           setOps(rep.operations || [])
           await load()
+          if (rep.status === 'failed') {
+            setError(
+              rep.error_message ||
+                'L’analyse du PDF a échoué. Réessayez avec un autre fichier ou ajoutez les lignes manuellement.'
+            )
+          }
           done = true
           break
         }
