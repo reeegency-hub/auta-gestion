@@ -168,18 +168,30 @@ def validate_expertise(
     return report
 
 
-@router.get("/{dossier_id}/expertise/file")
-def download_expertise_pdf(
+@router.delete("/{dossier_id}/expertise")
+def delete_expertise(
     dossier_id: int,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    """Supprime le rapport d'expertise et ses opérations (fichiers côté storage à purger séparément)."""
+    dossier = (
+        db.query(Dossier)
+        .filter(Dossier.id == dossier_id, Dossier.tenant_id == user.tenant_id)
+        .first()
+    )
+    require_open_dossier(dossier)
     report = (
         db.query(ExpertiseReport)
-        .join(Dossier)
-        .filter(ExpertiseReport.dossier_id == dossier_id, Dossier.tenant_id == user.tenant_id)
+        .options(joinedload(ExpertiseReport.operations))
+        .filter(ExpertiseReport.dossier_id == dossier_id)
         .first()
     )
     if not report:
-        raise HTTPException(status_code=404, detail="Rapport introuvable")
-    return file_response_or_404("reports", report.filename, report.original_name)
+        return {"ok": True, "deleted": False}
+    filename = report.filename
+    db.delete(report)
+    log_action(db, dossier_id, user, "expertise_deleted", filename or "")
+    db.commit()
+    return {"ok": True, "deleted": True, "filename": filename}
+
