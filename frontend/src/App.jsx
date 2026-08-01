@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { CoachProvider } from './components/Coach'
 import OfflineBanner from './components/OfflineBanner'
@@ -27,11 +27,15 @@ function Protected({ children }) {
 }
 
 export default function App() {
+  // GitHub Pages : HashRouter évite les 404 sur /login, /dossiers, etc.
+  const isPages = Boolean(import.meta.env.VITE_API_URL) || (import.meta.env.BASE_URL || '/') !== '/'
+  const Router = isPages ? HashRouter : BrowserRouter
   const basename = (import.meta.env.BASE_URL || '/').replace(/\/$/, '') || '/'
+
   return (
     <AuthProvider>
       <CoachProvider>
-        <BrowserRouter basename={basename === '/' ? undefined : basename}>
+        <Router basename={isPages ? undefined : basename === '/' ? undefined : basename}>
           <OfflineBanner />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
@@ -54,7 +58,7 @@ export default function App() {
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-        </BrowserRouter>
+        </Router>
       </CoachProvider>
     </AuthProvider>
   )
