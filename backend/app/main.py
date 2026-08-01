@@ -23,6 +23,7 @@ from app.api import (
 from app.core.config import get_settings
 from app.core.database import Base, engine
 from app.services.bootstrap import ensure_demo_user
+from app.services.schema_patch import ensure_extra_columns
 from app.services.storage import ensure_supabase_bucket, ensure_upload_dirs
 
 logger = logging.getLogger("auta")
@@ -78,6 +79,7 @@ app.include_router(templates.router)
 def on_startup():
     ensure_upload_dirs()
     Base.metadata.create_all(bind=engine)
+    ensure_extra_columns()
     ensure_demo_user()
     try:
         ensure_supabase_bucket()

@@ -124,6 +124,11 @@ class GarageSettings(Base):
     company_name: Mapped[str] = mapped_column(String(200), default="")
     address: Mapped[str] = mapped_column(String(300), default="")
     siret: Mapped[str] = mapped_column(String(50), default="")
+    phone: Mapped[str] = mapped_column(String(50), default="")
+    email: Mapped[str] = mapped_column(String(255), default="")
+    vat_number: Mapped[str] = mapped_column(String(50), default="")
+    rcs: Mapped[str] = mapped_column(String(100), default="")
+    payment_method: Mapped[str] = mapped_column(String(80), default="Chèque")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     tenant = relationship("Tenant", back_populates="settings")

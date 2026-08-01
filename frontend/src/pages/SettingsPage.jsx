@@ -91,6 +91,16 @@ export default function SettingsPage() {
             value={form.company_name}
             onChange={(e) => setForm({ ...form, company_name: e.target.value })}
           />
+          <Input
+            label="Téléphone (facture)"
+            value={form.phone || ''}
+            onChange={(e) => setForm({ ...form, phone: e.target.value })}
+          />
+          <Input
+            label="Email (facture)"
+            value={form.email || ''}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+          />
           <div className="sm:col-span-2">
             <Input
               label="Adresse"
@@ -98,6 +108,26 @@ export default function SettingsPage() {
               onChange={(e) => setForm({ ...form, address: e.target.value })}
             />
           </div>
+          <Input
+            label="SIRET / SIREN"
+            value={form.siret}
+            onChange={(e) => setForm({ ...form, siret: e.target.value })}
+          />
+          <Input
+            label="N° TVA"
+            value={form.vat_number || ''}
+            onChange={(e) => setForm({ ...form, vat_number: e.target.value })}
+          />
+          <Input
+            label="N° RCS"
+            value={form.rcs || ''}
+            onChange={(e) => setForm({ ...form, rcs: e.target.value })}
+          />
+          <Input
+            label="Mode de paiement (défaut)"
+            value={form.payment_method || 'Chèque'}
+            onChange={(e) => setForm({ ...form, payment_method: e.target.value })}
+          />
           <Input
             label="Taux carrosserie (€/h)"
             type="number"

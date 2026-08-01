@@ -57,7 +57,11 @@ class GarageSettingsIn(BaseModel):
     company_name: str = ""
     address: str = ""
     siret: str = ""
-
+    phone: str = ""
+    email: str = ""
+    vat_number: str = ""
+    rcs: str = ""
+    payment_method: str = "Chèque"
 
 class GarageSettingsOut(GarageSettingsIn):
     id: int
