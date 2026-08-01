@@ -90,7 +90,7 @@ def _heuristic_operations(text: str) -> list[dict]:
 
 
 async def _llm_operations(text: str):
-    """Extraction via Grok (xAI). Sans clé → None (fallback heuristique)."""
+    """Extraction via Grok (xAI). Sans clé / erreur API → None (fallback heuristique)."""
     settings = get_settings()
     api_key = settings.grok_api_key
     if not api_key:
@@ -117,22 +117,11 @@ async def _llm_operations(text: str):
             {"role": "user", "content": prompt},
         ],
         "temperature": 0.1,
+        "response_format": {"type": "json_object"},
     }
-    # Certains modèles Grok acceptent le mode JSON objet
-    payload["response_format"] = {"type": "json_object"}
 
-    async with httpx.AsyncClient(timeout=90) as client:
-        resp = await client.post(
-            f"{base}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-        )
-        if resp.status_code >= 400:
-            # Retry sans response_format si le modèle le refuse
-            payload.pop("response_format", None)
+    try:
+        async with httpx.AsyncClient(timeout=90) as client:
             resp = await client.post(
                 f"{base}/chat/completions",
                 headers={
@@ -141,32 +130,44 @@ async def _llm_operations(text: str):
                 },
                 json=payload,
             )
-        resp.raise_for_status()
-        content = resp.json()["choices"][0]["message"]["content"]
-        # Au cas où Grok entoure le JSON de markdown
-        content = content.strip()
-        if content.startswith("```"):
-            content = re.sub(r"^```(?:json)?\s*", "", content)
-            content = re.sub(r"\s*```$", "", content)
-        data = json.loads(content)
-        ops = []
-        for i, raw in enumerate(data.get("operations", [])):
-            try:
-                op_type = OperationType(raw["operation_type"])
-            except Exception:
-                op_type = OperationType.annexe
-            ops.append(
-                {
-                    "operation_type": op_type,
-                    "description": str(raw.get("description", "Opération"))[:500],
-                    "quantity": float(raw.get("quantity") or 1),
-                    "hours": float(raw.get("hours") or 0),
-                    "unit_cost": float(raw.get("unit_cost") or 0),
-                    "labor_category": str(raw.get("labor_category") or "carrosserie"),
-                    "sort_order": i,
-                }
-            )
-        return ops or None
+            if resp.status_code >= 400:
+                payload.pop("response_format", None)
+                resp = await client.post(
+                    f"{base}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                )
+            if resp.status_code >= 400:
+                return None
+            content = resp.json()["choices"][0]["message"]["content"]
+            content = content.strip()
+            if content.startswith("```"):
+                content = re.sub(r"^```(?:json)?\s*", "", content)
+                content = re.sub(r"\s*```$", "", content)
+            data = json.loads(content)
+            ops = []
+            for i, raw in enumerate(data.get("operations", [])):
+                try:
+                    op_type = OperationType(raw["operation_type"])
+                except Exception:
+                    op_type = OperationType.annexe
+                ops.append(
+                    {
+                        "operation_type": op_type,
+                        "description": str(raw.get("description", "Opération"))[:500],
+                        "quantity": float(raw.get("quantity") or 1),
+                        "hours": float(raw.get("hours") or 0),
+                        "unit_cost": float(raw.get("unit_cost") or 0),
+                        "labor_category": str(raw.get("labor_category") or "carrosserie"),
+                        "sort_order": i,
+                    }
+                )
+            return ops or None
+    except Exception:  # noqa: BLE001 — Grok indisponible → heuristique
+        return None
 
 
 async def process_expertise_report(db: Session, report_id: int, pdf_path: Path) -> None:
@@ -177,16 +178,20 @@ async def process_expertise_report(db: Session, report_id: int, pdf_path: Path) 
     db.commit()
     try:
         text = extract_pdf_text(pdf_path)
+        # OCR parfois espace chaque lettre : "F A C T U R E" → "FACTURE"
+        if text and text.count(" ") > len(text) * 0.35:
+            text = re.sub(r"(?<=\w) (?=\w)", "", text)
         report.raw_text = text
         ops_data = await _llm_operations(text) if text else None
         if not ops_data:
             ops_data = _heuristic_operations(text or "")
         report.operations.clear()
         if not ops_data:
-            report.status = ExtractionStatus.failed
+            # Draft vide = l'utilisateur peut saisir manuellement (pas un plantage technique)
+            report.status = ExtractionStatus.draft
             report.error_message = (
-                "Aucune opération détectée dans le PDF. "
-                "Ajoutez les lignes manuellement ou réessayez avec un rapport plus lisible."
+                "Aucune opération auto détectée (PDF peu lisible, ou Grok sans crédits). "
+                "Ajoutez les lignes manuellement avec « + Ajouter une opération »."
             )
         else:
             for op in ops_data:
@@ -195,5 +200,5 @@ async def process_expertise_report(db: Session, report_id: int, pdf_path: Path) 
             report.error_message = ""
     except Exception as exc:  # noqa: BLE001
         report.status = ExtractionStatus.failed
-        report.error_message = str(exc)
+        report.error_message = str(exc)[:500]
     db.commit()
