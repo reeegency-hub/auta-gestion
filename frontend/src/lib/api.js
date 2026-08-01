@@ -32,8 +32,12 @@ function formatDetail(detail) {
 }
 
 function loginPath() {
-  const base = import.meta.env.BASE_URL || '/'
-  return `${base}login`.replace(/\/{2,}/g, '/').replace('http:/', 'http://').replace('https:/', 'https://')
+  // HashRouter en prod Pages → /auta-gestion/#/login
+  if (import.meta.env.VITE_API_URL || (import.meta.env.BASE_URL || '/') !== '/') {
+    const base = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/')
+    return `${window.location.origin}${base}#/login`
+  }
+  return '/login'
 }
 
 export async function api(path, options = {}) {

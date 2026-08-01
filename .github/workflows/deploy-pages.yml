@@ -35,6 +35,8 @@ jobs:
         run: |
           npm ci
           npm run build
+          # SPA fallback GitHub Pages
+          cp dist/index.html dist/404.html
 
       - uses: actions/upload-pages-artifact@v3
         with:
