@@ -12,6 +12,9 @@ def send_document_email(
     subject: str,
     body: str,
     attachment_path: Optional[Union[str, Path]] = None,
+    *,
+    attachment_bytes: Optional[bytes] = None,
+    attachment_filename: Optional[str] = None,
 ) -> None:
     """Envoie un email (devis/facture) via SMTP. Lève ValueError si SMTP n'est pas configuré."""
     settings = get_settings()
@@ -27,12 +30,17 @@ def send_document_email(
     message["To"] = to
     message.set_content(body)
 
-    if attachment_path is not None:
+    data = attachment_bytes
+    name = attachment_filename
+    if data is None and attachment_path is not None:
         path = Path(attachment_path)
         if path.is_file():
             data = path.read_bytes()
-            subtype = "pdf" if path.suffix.lower() == ".pdf" else "octet-stream"
-            message.add_attachment(data, maintype="application", subtype=subtype, filename=path.name)
+            name = name or path.name
+    if data is not None:
+        filename = name or "document.pdf"
+        subtype = "pdf" if filename.lower().endswith(".pdf") else "octet-stream"
+        message.add_attachment(data, maintype="application", subtype=subtype, filename=filename)
 
     with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
         if settings.smtp_tls:

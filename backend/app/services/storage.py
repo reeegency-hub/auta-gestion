@@ -27,11 +27,13 @@ def _s3_client():
     if not settings.s3_enabled:
         return None
     import boto3
+    from botocore.config import Config
 
     kwargs = {
         "aws_access_key_id": settings.s3_access_key,
         "aws_secret_access_key": settings.s3_secret_key,
-        "region_name": settings.s3_region,
+        "region_name": settings.s3_region or "auto",
+        "config": Config(signature_version="s3v4"),
     }
     if settings.s3_endpoint_url:
         kwargs["endpoint_url"] = settings.s3_endpoint_url
@@ -130,6 +132,23 @@ def read_bytes(category: str, filename: str) -> bytes:
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Fichier introuvable")
     return path.read_bytes()
+
+
+def materialize_path(category: str, filename: str) -> Path:
+    """Retourne un chemin local utilisable (télécharge depuis S3 si besoin)."""
+    settings = get_settings()
+    if not settings.s3_enabled:
+        path = resolve_path(category, filename)
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail="Fichier introuvable")
+        return path
+    import tempfile
+
+    data = read_bytes(category, filename)
+    suffix = Path(filename).suffix or ".bin"
+    tmp = Path(tempfile.gettempdir()) / f"auta-{uuid.uuid4().hex}{suffix}"
+    tmp.write_bytes(data)
+    return tmp
 
 
 def file_response_or_404(category: str, filename: str, download_name: str | None = None):

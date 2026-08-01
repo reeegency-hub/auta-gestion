@@ -13,7 +13,7 @@ from app.services.audit import log_action
 from app.services.emailing import send_document_email
 from app.services.pdfs import generate_quote_pdf
 from app.services.quotes import build_quote_from_report, update_quote_lines
-from app.services.storage import file_response_or_404, resolve_path
+from app.services.storage import file_response_or_404, read_bytes
 
 router = APIRouter(prefix="/api", tags=["quotes"])
 
@@ -192,13 +192,14 @@ def email_quote(
     quote = _load_quote(db, quote_id, user.tenant_id)
     if not quote or not quote.pdf_filename:
         raise HTTPException(status_code=404, detail="Devis introuvable")
-    path = resolve_path("quotes", quote.pdf_filename)
     try:
+        pdf_data = read_bytes("quotes", quote.pdf_filename)
         send_document_email(
             payload.to,
             f"Devis {quote.number}",
             payload.message or f"Veuillez trouver ci-joint le devis {quote.number}.",
-            path if path.is_file() else None,
+            attachment_bytes=pdf_data,
+            attachment_filename=quote.pdf_filename,
         )
     except ValueError as exc:
         raise HTTPException(status_code=501, detail=str(exc)) from exc

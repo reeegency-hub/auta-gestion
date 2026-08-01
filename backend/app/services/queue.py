@@ -13,18 +13,25 @@ def run_extraction_job(report_id: int, expected_filename: Optional[str] = None) 
     a été importé entre-temps (expected_filename ne correspond plus)."""
     from app.models import ExpertiseReport
     from app.services.extraction import process_expertise_report
-    from app.services.storage import resolve_path
+    from app.services.storage import materialize_path
 
     db = SessionLocal()
+    tmp_path = None
     try:
         report = db.query(ExpertiseReport).filter(ExpertiseReport.id == report_id).first()
         if not report or not report.filename:
             return
         if expected_filename and report.filename != expected_filename:
             return
-        pdf_path = resolve_path("reports", report.filename)
+        pdf_path = materialize_path("reports", report.filename)
+        tmp_path = pdf_path if get_settings().s3_enabled else None
         asyncio.run(process_expertise_report(db, report_id, pdf_path))
     finally:
+        if tmp_path is not None:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
         db.close()
 
 

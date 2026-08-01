@@ -1,5 +1,5 @@
 from __future__ import annotations
-from pathlib import Path
+import io
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -8,7 +8,7 @@ from reportlab.lib.units import cm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.models import Client, Dossier, GarageSettings, Invoice, Quote
-from app.services.storage import ensure_upload_dirs
+from app.services.storage import save_bytes
 
 
 def _money(v: float) -> str:
@@ -21,11 +21,8 @@ def generate_quote_pdf(
     client: Client,
     settings: GarageSettings,
 ) -> str:
-    ensure_upload_dirs()
     filename = f"{quote.number}.pdf"
-    path = Path(ensure_upload_dirs()) / "quotes" / filename
-    _render_document(
-        path=path,
+    data = _render_document(
         title=f"Devis {quote.number}",
         quote_or_invoice_lines=quote.lines,
         dossier=dossier,
@@ -42,7 +39,7 @@ def generate_quote_pdf(
             "tva_rate": settings.tva_rate,
         },
     )
-    return filename
+    return save_bytes(data, "quotes", filename)
 
 
 def generate_invoice_pdf(
@@ -52,11 +49,8 @@ def generate_invoice_pdf(
     client: Client,
     settings: GarageSettings,
 ) -> str:
-    ensure_upload_dirs()
     filename = f"{invoice.number}.pdf"
-    path = Path(ensure_upload_dirs()) / "invoices" / filename
-    _render_document(
-        path=path,
+    data = _render_document(
         title=f"Facture {invoice.number}",
         quote_or_invoice_lines=quote.lines,
         dossier=dossier,
@@ -73,12 +67,13 @@ def generate_invoice_pdf(
             "tva_rate": settings.tva_rate,
         },
     )
-    return filename
+    return save_bytes(data, "invoices", filename)
 
 
-def _render_document(*, path, title, quote_or_invoice_lines, dossier, client, settings, totals):
+def _render_document(*, title, quote_or_invoice_lines, dossier, client, settings, totals) -> bytes:
     styles = getSampleStyleSheet()
-    doc = SimpleDocTemplate(str(path), pagesize=A4, leftMargin=2 * cm, rightMargin=2 * cm)
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=2 * cm, rightMargin=2 * cm)
     story = []
     company = settings.company_name or "AUTA Gestion"
     story.append(Paragraph(f"<b>{company}</b>", styles["Title"]))
@@ -144,3 +139,4 @@ def _render_document(*, path, title, quote_or_invoice_lines, dossier, client, se
     )
     story.append(t2)
     doc.build(story)
+    return buffer.getvalue()
