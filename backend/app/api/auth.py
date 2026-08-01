@@ -56,7 +56,8 @@ def list_users(db: Session = Depends(get_db), user: User = Depends(get_current_u
 
 @router.post("/login", response_model=Token)
 def login_json(payload: LoginIn, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == payload.email).first()
+    email = payload.email.strip().lower()
+    user = db.query(User).filter(User.email == email).first()
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Identifiants invalides")
     return Token(access_token=create_access_token(user.email))
@@ -64,7 +65,8 @@ def login_json(payload: LoginIn, db: Session = Depends(get_db)):
 
 @router.post("/login-form", response_model=Token)
 def login_form(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == form.username).first()
+    email = form.username.strip().lower()
+    user = db.query(User).filter(User.email == email).first()
     if not user or not verify_password(form.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Identifiants invalides")
     return Token(access_token=create_access_token(user.email))

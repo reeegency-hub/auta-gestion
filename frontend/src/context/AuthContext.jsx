@@ -22,10 +22,11 @@ export function AuthProvider({ children }) {
   async function login(email, password) {
     const data = await api('/api/auth/login', {
       method: 'POST',
-      body: { email, password },
+      body: { email: String(email || '').trim().toLowerCase(), password },
+      timeoutMs: 90000,
     })
     setToken(data.access_token)
-    const me = await api('/api/auth/me')
+    const me = await api('/api/auth/me', { timeoutMs: 90000 })
     setUser(me)
     return me
   }

@@ -30,6 +30,9 @@ export default function LoginPage() {
     e.preventDefault()
     setError('')
     setLoading(true)
+    const wake = setTimeout(() => {
+      setError('Le serveur se réveille… encore quelques secondes.')
+    }, 4000)
     try {
       if (mode === 'login') {
         await login(form.email, form.password)
@@ -41,10 +44,12 @@ export default function LoginPage() {
           garage_name: form.garage_name,
         })
       }
+      setError('')
       navigate('/')
     } catch (err) {
       setError(err.message)
     } finally {
+      clearTimeout(wake)
       setLoading(false)
     }
   }

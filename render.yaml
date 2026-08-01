@@ -20,6 +20,6 @@ services:
       - key: UPLOAD_DIR
         value: /tmp/auta-uploads
       - key: CORS_ORIGINS
-        sync: false
+        value: "https://reeegency-hub.github.io,https://reeegency-hub.github.io/auta-gestion"
       - key: PYTHON_VERSION
         value: "3.11.9"

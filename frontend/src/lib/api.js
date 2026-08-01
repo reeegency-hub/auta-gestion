@@ -49,11 +49,24 @@ export async function api(path, options = {}) {
     options.body = JSON.stringify(options.body)
   }
 
+  const timeoutMs = options.timeoutMs ?? 90000
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+
   let res
   try {
-    res = await fetch(apiUrl(path), { ...options, headers })
-  } catch {
-    throw new Error('Connexion impossible. Vérifie ton réseau ou que le serveur est démarré.')
+    res = await fetch(apiUrl(path), { ...options, headers, signal: controller.signal })
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw new Error(
+        'Le serveur met du temps à démarrer (hébergement gratuit). Réessaie dans 30 secondes.'
+      )
+    }
+    throw new Error(
+      'Connexion impossible. Vérifie le réseau, ou attends 30 s si c’est la première ouverture de la journée.'
+    )
+  } finally {
+    clearTimeout(timer)
   }
 
   if (res.status === 401) {
